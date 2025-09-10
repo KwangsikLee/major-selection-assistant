@@ -1,0 +1,24 @@
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+.vscode/
+.claude/
+# faiss
+*.faiss
+*.pkl
+
+temp_texts/
+temp_images/
+korea_univ_guides
+
+vector_db/
+.env
+*.png
+*.json
+
+CLAUDE.md
+progress.md
+
