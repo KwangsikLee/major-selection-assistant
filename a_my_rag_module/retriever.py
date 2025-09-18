@@ -45,7 +45,7 @@ class MyReranker:
         self.current_reranker = None
         self.current_model_key = None
 
-    def load_reranker(self, model_key: str = DEFAULT_RERANKER_MODEL) -> CrossEncoder:
+    def load_reranker(self, model_key: str = DEFAULT_RERANKER_MODEL) -> Optional[CrossEncoder]:
         """Reranker 모델 로드"""
         if model_key in self.loaded_rerankers:
             self.current_reranker = self.loaded_rerankers[model_key]
@@ -117,8 +117,8 @@ class MyReranker:
 # =============================================================================
 
 class AdvancedHybridRetriever:
-    def __init__(self, documents: List[Document] = None, vector_store: FAISS = None,
-                 reranker: MyReranker = None, reranker_model: str = DEFAULT_RERANKER_MODEL):
+    def __init__(self, vector_store: FAISS, documents: Optional[List[Document]] = None,
+                 reranker: Optional[MyReranker] = None, reranker_model: str = DEFAULT_RERANKER_MODEL):
         self.vector_store = vector_store
         self.reranker = reranker or MyReranker()
         
@@ -247,9 +247,10 @@ class AdvancedHybridRetriever:
 
     def hybrid_search(self, query: str, k: int = 5, use_rerank: bool = True) -> List[Document]:
         """하이브리드 검색 + Rerank"""
-        docs = self.ensemble_retriever.invoke(query)
-        if use_rerank and self.reranker.current_reranker:
-            docs = self.reranker.rerank_documents(query, docs, k)
+        if self.ensemble_retriever is not None:
+            docs = self.ensemble_retriever.invoke(query)
+            if use_rerank and self.reranker.current_reranker:
+                docs = self.reranker.rerank_documents(query, docs, k)
         return docs[:k]
 
     def advanced_search(self, query: str, method: str = "hybrid", k: int = 5,
@@ -264,7 +265,7 @@ class AdvancedHybridRetriever:
                 docs = self.bm25_retriever.invoke(query)[:rerank_top_k]
             else:
                 docs = self.vector_retriever.invoke(query)[:rerank_top_k]
-        elif method == "ensemble":
+        elif method == "ensemble" and self.ensemble_retriever:
             # 앙상블 검색 (BM25 + Vector)
             docs = self.ensemble_retriever.invoke(query)[:rerank_top_k]
         else:  # method == "hybrid"
@@ -324,29 +325,33 @@ class AdvancedHybridRetriever:
 
 class HybridRetrieverWrapper(BaseRetriever):
     """AdvancedHybridRetriever를 내부에서 생성하여 LangChain과 호환되도록 하는 래퍼 클래스"""
-    
+
     model_config = ConfigDict(arbitrary_types_allowed=True, extra='allow')
-    
-    vector_store: Any = Field(description="FAISS vector store instance")
+
+    # Optional fields to avoid validation errors
+    vector_store: Optional[Any] = Field(default=None, description="FAISS vector store instance")
     reranker_model: str = Field(default=DEFAULT_RERANKER_MODEL, description="Reranker model name")
     search_method: str = Field(default="similarity", description="Default search method (similarity, keyword, ensemble, hybrid)")
-    
-    def __init__(self, vector_store: FAISS, reranker_model: str = DEFAULT_RERANKER_MODEL, 
+
+    def __init__(self, vector_store: FAISS, reranker_model: str = DEFAULT_RERANKER_MODEL,
                  search_method: str = "similarity", **kwargs):
-        super().__init__(
-            vector_store=vector_store, 
-            reranker_model=reranker_model,
-            search_method=search_method,
-            **kwargs
-        )
-        
+        # Set default values for all fields
+        kwargs.setdefault('vector_store', vector_store)
+        kwargs.setdefault('reranker_model', reranker_model)
+        kwargs.setdefault('search_method', search_method)
+
+        # Call parent constructor
+        super().__init__(**kwargs)
+
         self.hybrid_retriever = AdvancedHybridRetriever(
+            documents=None,
             vector_store=vector_store,
             reranker_model=reranker_model
         )
     
     def _get_relevant_documents(self, query: str, *, run_manager=None) -> List[Document]:
         """LangChain BaseRetriever의 필수 메소드 구현"""
+        # run_manager parameter is required by BaseRetriever interface but not used here
         # 설정된 검색 방법 사용 (상위 3개 문서 검색, reranking 적용)
         return self.hybrid_retriever.advanced_search(
             query=query, 
@@ -442,4 +447,4 @@ if __name__ == "__main__":
 
     # 5. 고급 검색기 생성
     print("5. 고급 하이브리드 검색기 생성 중...")
-    retriever = AdvancedHybridRetriever(documents, vector_store)
+    retriever = AdvancedHybridRetriever(vector_store, documents)

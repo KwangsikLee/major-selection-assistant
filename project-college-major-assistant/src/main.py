@@ -84,7 +84,10 @@ class CollegeMajorAssistant:
     
     def ask_question(self, question: str) -> tuple:
         """질문에 답변하기"""
-        if not self.is_initialized:
+
+        if not self.rag_system:
+            return "❌ 시스템이 초기화되지 않았습니다. 먼저 '시스템 초기화' 버튼을 클릭하세요.", ""
+        if not self.is_initialized or not self.rag_system:
             return "❌ 시스템이 초기화되지 않았습니다. 먼저 '시스템 초기화' 버튼을 클릭하세요.", ""
         
         if not question.strip():
@@ -124,7 +127,7 @@ class CollegeMajorAssistant:
                 3. **개인 맞춤형 전공 추천**
 
                 ### 사용법
-                1. '시스템 초기화' 버튼을 클릭하여 시스템을 준비합니다.
+                1. 시스템이 자동으로 초기화됩니다. (수동 초기화도 가능)
                 2. 전공, 진로, 대학생활에 관한 질문을 입력하세요.
                 3. AI가 대학 안내 자료를 바탕으로 답변해드립니다.
                 """
@@ -133,22 +136,22 @@ class CollegeMajorAssistant:
 def create_gradio_interface():
     """Gradio 인터페이스 생성"""
     assistant = CollegeMajorAssistant()
-    
+
     def init_system_with_progress():
         """진행상황을 표시하면서 시스템 초기화"""
         progress_messages = []
-        
+
         def progress_callback(message):
             progress_messages.append(message)
             return "\n".join(progress_messages)
-        
+
         success, message = assistant.initialize_system(progress_callback)
         final_status = "\n".join(progress_messages)
-        
+
         if success:
             return (
                 f"{final_status}\n✅ {message}",    # init_status
-                gr.update(interactive=True),         # question_input  
+                gr.update(interactive=True),         # question_input
                 gr.update(interactive=True)          # ask_btn
             )
         else:
@@ -157,6 +160,10 @@ def create_gradio_interface():
                 gr.update(interactive=False),        # question_input
                 gr.update(interactive=False)         # ask_btn
             )
+
+    def auto_init_on_load():
+        """인터페이스 로드 시 자동으로 시스템 초기화 실행"""
+        return init_system_with_progress()
     
     def process_question(question, history):
         """질문 처리 및 채팅 히스토리 업데이트"""
@@ -191,12 +198,12 @@ def create_gradio_interface():
                 # 시스템 정보 및 제어
                 system_info = gr.Markdown(assistant.get_system_info())
                 
-                init_btn = gr.Button("🚀 시스템 초기화", variant="primary", size="lg")
                 init_status = gr.Textbox(
                     label="초기화 상태",
                     lines=5,
                     interactive=False,
-                    placeholder="시스템 초기화 버튼을 클릭하세요."
+                    value="🚀 시스템 자동 초기화를 시작합니다...",
+                    placeholder="시스템 초기화가 자동으로 실행됩니다."
                 )
                 
             with gr.Column(scale=2):
@@ -226,10 +233,10 @@ def create_gradio_interface():
                     ],
                     inputs=[question_input]
                 )
-        
-        # 이벤트 핸들링
-        init_btn.click(
-            fn=init_system_with_progress,
+
+        # 인터페이스 로드 시 자동 초기화
+        interface.load(
+            fn=auto_init_on_load,
             outputs=[init_status, question_input, ask_btn]
         )
         
@@ -264,8 +271,7 @@ def main():
     interface = create_gradio_interface()
     
     print("🌐 Gradio 서버 시작...")
-    print("📱 브라우저에서 접속하여 사용하세요.")
-    
+    print("브라우저에서 http://localhost:7860 으로 접속하세요.")
     interface.launch(
         server_name="0.0.0.0",  # 외부 접속 허용
         server_port=7860,       # 포트 설정

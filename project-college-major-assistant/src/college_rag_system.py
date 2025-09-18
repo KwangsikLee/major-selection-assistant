@@ -40,7 +40,12 @@ class CollegeRAGSystem:
         return self.builder.build_vector_store(progress_callback)
     
     def initialize_vector_db(self, force_rebuild: bool = False, progress_callback: Optional[Callable] = None):
-        return self.builder.initialize_vector_db(force_rebuild, progress_callback)
+        result = self.builder.initialize_vector_db(force_rebuild, progress_callback)
+        if isinstance(result, tuple) and len(result) == 2:
+            return result
+        else:
+            # 기본 실패 메시지 반환
+            return False, "벡터 DB 초기화 결과가 올바르지 않습니다."
     
     def get_vector_store_info(self) -> Dict[str, Any]:
         return self.builder.get_vector_store_info()

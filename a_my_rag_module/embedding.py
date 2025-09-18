@@ -118,7 +118,7 @@ class MultiEmbeddingManager:
         return "모델이 로드되지 않음"
 
 class VectorStoreManager:
-    def __init__(self, embedding_model_key: str = "embedding-gemma", save_directory: str = "faiss_indexes", hf_api_token: str = None):
+    def __init__(self, embedding_model_key: str = "embedding-gemma", save_directory: str = "faiss_indexes", hf_api_token: Optional[str] = None):
         self.embedding_manager = MultiEmbeddingManager(api_token=hf_api_token)
         
         self.vector_stores = {}  # 모델별 벡터 스토어 저장
@@ -148,7 +148,7 @@ class VectorStoreManager:
         except Exception as e:
             return f"❌ 모델 변경 실패: {str(e)}"
 
-    def create_vector_store(self, documents: List[Document], model_key: str = None) -> FAISS:
+    def create_vector_store(self, documents: List[Document], model_key: Optional[str] = None) -> FAISS:
         """벡터 스토어 생성 - Document 메타데이터 강화"""
         if model_key and model_key != self.current_model_key:
             self.switch_embedding_model(model_key)
@@ -549,7 +549,7 @@ class VectorStoreManager:
         # FAISS에서 모든 문서 가져오기
         all_docs = []
         if hasattr(self.current_vector_store, 'docstore') and hasattr(self.current_vector_store.docstore, '_dict'):
-            for doc_id, doc in self.current_vector_store.docstore._dict.items():
+            for _, doc in self.current_vector_store.docstore._dict.items():
                 if metadata_key in doc.metadata and doc.metadata[metadata_key] == metadata_value:
                     all_docs.append(doc)
         

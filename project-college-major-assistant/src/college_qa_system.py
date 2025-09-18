@@ -62,8 +62,7 @@ class CollegeQASystem:
             # OpenAI 설정
             self.llm = ChatOpenAI(
                 model="gpt-4o-mini",
-                temperature=0.2,
-                max_tokens=800
+                temperature=0.2
             )
     
     def setup_prompt_template(self):
@@ -101,7 +100,7 @@ class CollegeQASystem:
             self.vector_manager = VectorStoreManager(
                 embedding_model_key=self.DEFAULT_MODEL_KEY, 
                 save_directory=str(self.vector_db_dir),
-                hf_api_token=hf_token
+                hf_api_token=hf_token if hf_token is not None else ""
             )
     
     def load_vector_store(self):
@@ -114,21 +113,20 @@ class CollegeQASystem:
             
             # VectorStoreManager 초기화
             self.initialize_vector_manager()
-            
-            # VectorStoreManager로 벡터 스토어 로드 시도
-            result, message = self.vector_manager.load_vector_store(
-                self.DEFAULT_INDEX_NAME, 
-                self.DEFAULT_MODEL_KEY
-            )
-            
-            if result:
-                self.vector_store = self.vector_manager.current_vector_store
-                print(f"✅ VectorStoreManager로 벡터 스토어 로드 완료!")
-                print(f"   {message}")
+            if self.vector_manager is not None:
+                # VectorStoreManager로 벡터 스토어 로드 시도
+                result, message = self.vector_manager.load_vector_store(
+                    self.DEFAULT_INDEX_NAME, 
+                    self.DEFAULT_MODEL_KEY
+                )
                 
-                # HybridRetrieverWrapper 초기화
-                self.setup_hybrid_retriever()
-            else:
+                if result:
+                    self.vector_store = self.vector_manager.current_vector_store                    
+                    print(f"   {message}")                    
+                    # HybridRetrieverWrapper 초기화
+                    self.setup_hybrid_retriever()
+                
+            if not self.vector_store:
                 # VectorStoreManager 로드 실패 시 기존 방식으로 시도
                 print(f"⚠️ VectorStoreManager 로드 실패: {message}")
                 raise ValueError("벡터 스토어가 로드되지 않았습니다.")
@@ -151,9 +149,12 @@ class CollegeQASystem:
     def setup_hybrid_retriever(self):
         """HybridRetrieverWrapper 설정"""
         try:
-            self.hybrid_retriever_wrapper = HybridRetrieverWrapper(
-                vector_store=self.vector_store
-            )
+            if self.vector_store is not None:
+                self.hybrid_retriever_wrapper = HybridRetrieverWrapper(
+                    vector_store=self.vector_store
+                )
+            else:
+                raise ValueError("vector_store가 None입니다.")
         except Exception as e:
             print(f"⚠️ HybridRetrieverWrapper 설정 실패: {e}")
             print("   기본 벡터 검색기를 사용합니다.")

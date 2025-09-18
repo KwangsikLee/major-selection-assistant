@@ -91,7 +91,7 @@ class VectorStoreBuilder:
             self.vector_manager = VectorStoreManager(
                 embedding_model_key=self.DEFAULT_MODEL_KEY, 
                 save_directory=str(self.vector_db_dir),
-                hf_api_token=hf_token
+                hf_api_token=hf_token if hf_token is not None else ""
             )
     
     def vector_store_exists(self) -> bool:
@@ -316,11 +316,16 @@ class VectorStoreBuilder:
                 print(f"   🤖 VectorStoreManager를 사용하여 벡터 스토어 생성 중...")
                 
                 # 5. 벡터 스토어 생성 및 자동 저장
-                self.vector_store = self.vector_manager.auto_save_after_creation(
-                    documents=all_documents,
-                    index_name=self.DEFAULT_INDEX_NAME,
-                    model_key=self.DEFAULT_MODEL_KEY
-                )
+                # Ensure vector_manager is initialized before use
+                self.initialize_vector_manager()
+                if self.vector_manager is not None:
+                    self.vector_store = self.vector_manager.auto_save_after_creation(
+                        documents=all_documents,
+                        index_name=self.DEFAULT_INDEX_NAME,
+                        model_key=self.DEFAULT_MODEL_KEY
+                    )
+                else:
+                    raise RuntimeError("VectorStoreManager is not initialized.")
                 
                 print(f"   ✅ VectorStoreManager로 벡터 스토어 생성 완료")
                 
@@ -401,20 +406,22 @@ class VectorStoreBuilder:
                     # VectorStoreManager를 먼저 시도
                     self.initialize_vector_manager()
                     
-                    # VectorStoreManager로 저장된 인덱스 로드 시도
-                    result, message = self.vector_manager.load_vector_store(self.DEFAULT_INDEX_NAME, self.DEFAULT_MODEL_KEY)
-                    
-                    if result:
-                        self.vector_store = self.vector_manager.current_vector_store
+                    if self.vector_manager is not None:
+                        # VectorStoreManager로 저장된 인덱스 로드 시도
+                        result, message = self.vector_manager.load_vector_store(self.DEFAULT_INDEX_NAME, self.DEFAULT_MODEL_KEY)
                         
-                        if progress_callback:
-                            progress_callback("✅ VectorStoreManager 벡터 DB 검증 완료!")
+                        if result:
+                            self.vector_store = self.vector_manager.current_vector_store
+                            
+                            if progress_callback:
+                                progress_callback("VectorStoreManager 벡터 DB 검증 완료!")
+                            
+                            print("VectorStoreManager 벡터 DB 검증 완료!")
+                            return True, "VectorStoreManager 벡터 DB 검증 완료."
+                        else:
+                            print(f"     VectorStoreManager 로드 실패: {message}")
                         
-                        print("✅ VectorStoreManager 벡터 DB 검증 완료!")
-                        return True, "VectorStoreManager 벡터 DB 검증 완료."
-                    else:
-                        print(f"   ⚠️ VectorStoreManager 로드 실패: {message}")
-                
+                    raise ValueError("벡터 스토어가 로드되지 않았습니다.")
                 except Exception as e:
                     if progress_callback:
                         progress_callback(f"기존 DB 검증 실패 - 새로 구축: {e}")
