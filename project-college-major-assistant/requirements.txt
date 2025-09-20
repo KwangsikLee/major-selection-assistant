@@ -24,6 +24,7 @@ transformers>=4.30.0
 kss>=4.5.0
 tiktoken>=0.5.0
 torch>=2.0.0
+krag
 
 # Data Processing
 numpy>=1.24.0
