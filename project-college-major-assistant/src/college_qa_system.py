@@ -151,7 +151,8 @@ class CollegeQASystem:
         try:
             if self.vector_store is not None:
                 self.hybrid_retriever_wrapper = HybridRetrieverWrapper(
-                    vector_store=self.vector_store
+                    vector_store=self.vector_store,
+                    search_method="ensemble"
                 )
             else:
                 raise ValueError("vector_store가 None입니다.")

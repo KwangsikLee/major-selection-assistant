@@ -73,7 +73,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--method",
         choices=["similarity", "keyword", "hybrid", "ensemble", "advanced"],
-        default="similarity",
+        default="ensemble",
         help="Retriever search strategy to evaluate.",
     )
     parser.add_argument(
@@ -164,6 +164,9 @@ def retrieve_documents(
 
     # advanced_search prints retrieval traces; silence unless verbose is requested
     target_method = "ensemble" if args.method == "ensemble" else "hybrid"
+
+    print(f"retrieve docs : {target_method}, k:{args.top_k}, use_rerank:{not args.no_rerank}")
+
     if args.verbose:
         return retriever.advanced_search(
             question,
@@ -338,6 +341,13 @@ def main() -> None:
     evaluator.embeddings = manager.embeddings
     retriever = build_retriever(manager, args)
 
+    description = """Hit Rate는 0~1 사이의 값으로 검색된 문서 중 실제 관련 있는 문서의 비율을 측정하며, 순서를 고려하지 않은 기본적인 평가 지표
+    Mean Reciprocal Rank (MRR) 은 첫 번째 관련 문서가 등장하는 순위의 역수를 평균 내어 계산하며, 검색 결과의 순서를 고려한 평가가 가능
+    Mean Average Precision (mAP@k) 는 상위 k개 문서 내에서 관련 문서 검색의 정확도를 평균화하여 산출
+    NDCG@k는 문서의 관련성과 검색 순위를 동시에 고려하여 이상적인 순위와 비교한 정규화 점수를 제공하는 종합적인 평가 지표"""
+
+    print(description)
+
     results, actual_sets, predicted_sets = evaluate_dataset(df, retriever, evaluator, args)
     summarize(results)
 
@@ -351,7 +361,12 @@ def main() -> None:
 
     print("\n=== ROUGE 기반 Retrieval Metrics (k=5) ===")
     for metric_name, value in rouge_metrics.iloc[0].items():
-        print(f"{metric_name}: {value:.4f}")
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError):
+            print(f"{metric_name}: {value}")
+        else:
+            print(f"{metric_name}: {numeric_value:.4f}")
 
     if args.output:
         output_path = Path(args.output)
