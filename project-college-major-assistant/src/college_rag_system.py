@@ -39,8 +39,8 @@ class CollegeRAGSystem:
     def build_vector_store(self, progress_callback: Optional[Callable] = None):
         return self.builder.build_vector_store(progress_callback)
     
-    def initialize_vector_db(self, force_rebuild: bool = False, progress_callback: Optional[Callable] = None):
-        result = self.builder.initialize_vector_db(force_rebuild, progress_callback)
+    def initialize_vector_db(self, force_rebuild: bool = False, from_json: bool = False, progress_callback: Optional[Callable] = None):
+        result = self.builder.initialize_vector_db(force_rebuild, from_json, progress_callback)
         if isinstance(result, tuple) and len(result) == 2:
             return result
         else:
@@ -62,26 +62,28 @@ class CollegeRAGSystem:
 
 
 # 독립 실행 함수들
-def initialize_database(force_rebuild: bool = False):
+def initialize_database(force_rebuild: bool = False, from_json: bool = False):
     """독립 실행 가능한 벡터 DB 초기화 함수"""
     print("🚀 벡터 DB 초기화 시작")
     print("=" * 50)
-    
+
     # 경로 설정 - 프로젝트 루트 디렉토리 기준
     project_root = Path(__file__).parent.parent
     pdf_dir = project_root / "korea_univ_guides"
     temp_images_dir = project_root / "temp_images"
     vector_db_dir = project_root / "vector_db"
-    
-    # PDF 파일 확인
-    pdf_files = list(pdf_dir.glob("*.pdf"))
-    if not pdf_files:
-        print(f"❌ PDF 파일이 없습니다: {pdf_dir}")
-        print("   korea_univ_guides/ 폴더에 대학교 안내 PDF 파일을 추가하세요.")
-        return False
-    
-    print(f"📄 발견된 PDF 파일: {len(pdf_files)}개")
-    
+
+    # from_json 모드가 아닌 경우에만 PDF 파일 확인
+    if not from_json:
+        pdf_files = list(pdf_dir.glob("*.pdf"))
+        if not pdf_files:
+            print(f"❌ PDF 파일이 없습니다: {pdf_dir}")
+            print("   korea_univ_guides/ 폴더에 대학교 안내 PDF 파일을 추가하세요.")
+            return False
+        print(f"📄 발견된 PDF 파일: {len(pdf_files)}개")
+    else:
+        print("📄 JSON 파일에서 벡터 DB 구축 모드")
+
     # RAG 시스템 초기화
     try:
         rag_system = CollegeRAGSystem(
@@ -89,10 +91,11 @@ def initialize_database(force_rebuild: bool = False):
             temp_images_dir=str(temp_images_dir),
             vector_db_dir=str(vector_db_dir)
         )
-        
+
         # 벡터 DB 초기화 실행
         success, message = rag_system.initialize_vector_db(
-            force_rebuild=force_rebuild
+            force_rebuild=force_rebuild,
+            from_json=from_json
         )
         
         if success:
@@ -173,13 +176,15 @@ if __name__ == "__main__":
                        help="벡터 DB 초기화")
     parser.add_argument("--force-rebuild", action="store_true",
                        help="기존 DB 삭제 후 강제 재구축")
+    parser.add_argument("--from-json", action="store_true",
+                       help="temp_texts 폴더의 documents.json 파일들로부터 벡터 DB 구축 (OCR 단계 건너뛰기)")
     parser.add_argument("--test", action="store_true",
                        help="RAG 시스템 테스트 실행")
     
     args = parser.parse_args()
     
     if args.init_db:
-        success = initialize_database(force_rebuild=args.force_rebuild)
+        success = initialize_database(force_rebuild=args.force_rebuild, from_json=args.from_json)
         if success:
             print("\n🎉 벡터 DB 초기화가 완료되었습니다!")
             print("이제 'python main.py'를 실행하여 웹 인터페이스를 사용할 수 있습니다.")

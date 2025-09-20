@@ -208,7 +208,7 @@ class VectorStoreManager:
         """현재 모델 정보"""
         return self.embedding_manager.get_current_model_info()
     
-    def save_vector_store(self, index_name: str, model_key: str = None) -> tuple[bool, str]:
+    def save_vector_store(self, index_name: str, model_key: str) -> tuple[bool, str]:
         """벡터 스토어를 파일로 저장"""
         if model_key is None:
             model_key = self.current_model_key
@@ -380,7 +380,7 @@ class VectorStoreManager:
         except Exception:
             return False
     
-    def auto_save_after_creation(self, documents: List[Document], index_name: str, model_key: str = None) -> FAISS:
+    def auto_save_after_creation(self, documents: List[Document], index_name: str, model_key: str) -> FAISS:
         """문서로부터 벡터 스토어 생성 후 자동 저장"""
         vector_store = self.create_vector_store(documents, model_key)
         save_result = self.save_vector_store(index_name, model_key)

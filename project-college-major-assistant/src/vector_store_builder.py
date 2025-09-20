@@ -161,9 +161,9 @@ class VectorStoreBuilder:
         
         processed_pdfs = []
         
-        # 샘플로 처음 5개 파일만 처리 (MVP)
-        sample_files = pdf_files[:5]
-        # sample_files = [self.pdf_dir / "01-경영대학.pdf"]
+        # # 샘플로 처음 5개 파일만 처리 (MVP)
+        # sample_files = pdf_files[:5]        
+        sample_files = pdf_files
         
         for i, pdf_file in enumerate(sample_files):
             try:
@@ -388,53 +388,64 @@ class VectorStoreBuilder:
             print(f"❌ Document 로드 실패 ({pdf_filename}): {e}")
             return []
     
-    def initialize_vector_db(self, force_rebuild: bool = False, progress_callback: Optional[Callable] = None):
-        """벡터 DB 초기화 - 독립 실행 가능한 초기화 함수"""
+    def initialize_vector_db(self, force_rebuild: bool = False, from_json: bool = False, progress_callback: Optional[Callable] = None):
+        """
+        벡터 DB 초기화 - 독립 실행 가능한 초기화 함수
+
+        Args:
+            force_rebuild: 기존 DB 강제 재구축 여부
+            from_json: temp_texts 폴더의 documents.json 파일들로부터 DB 구축 여부
+            progress_callback: 진행상황 콜백 함수
+        """
         try:
             if progress_callback:
                 progress_callback("벡터 DB 초기화 시작...")
-            
+
             print("🔄 벡터 DB 초기화 시작...")
-            
+
+            # from_json 옵션이 활성화된 경우 직접 JSON에서 빌드
+            if from_json:
+                return self._build_from_json(progress_callback)
+
             # 기존 벡터 DB 확인
             if self.vector_store_exists() and not force_rebuild:
                 if progress_callback:
                     progress_callback("기존 벡터 DB 발견 - 검증 중...")
-                
+
                 print("📁 기존 벡터 DB 발견 - 검증 시도...")
                 try:
                     # VectorStoreManager를 먼저 시도
                     self.initialize_vector_manager()
-                    
+
                     if self.vector_manager is not None:
                         # VectorStoreManager로 저장된 인덱스 로드 시도
                         result, message = self.vector_manager.load_vector_store(self.DEFAULT_INDEX_NAME, self.DEFAULT_MODEL_KEY)
-                        
+
                         if result:
                             self.vector_store = self.vector_manager.current_vector_store
-                            
+
                             if progress_callback:
                                 progress_callback("VectorStoreManager 벡터 DB 검증 완료!")
-                            
+
                             print("VectorStoreManager 벡터 DB 검증 완료!")
                             return True, "VectorStoreManager 벡터 DB 검증 완료."
                         else:
                             print(f"     VectorStoreManager 로드 실패: {message}")
-                        
+
                     raise ValueError("벡터 스토어가 로드되지 않았습니다.")
                 except Exception as e:
                     if progress_callback:
                         progress_callback(f"기존 DB 검증 실패 - 새로 구축: {e}")
-                    
+
                     print(f"⚠️ 기존 DB 검증 실패 - 새로 구축합니다: {e}")
                     force_rebuild = True
-            
+
             # 새 벡터 DB 구축 또는 강제 재구축
             if not self.vector_store_exists() or force_rebuild:
                 if force_rebuild:
                     if progress_callback:
                         progress_callback("기존 벡터 DB 삭제 후 새로 구축...")
-                    
+
                     print("🗑️ 기존 벡터 DB 삭제 후 새로 구축...")
                     # VectorStoreManager의 delete_saved_index 메서드 사용
                     if self.vector_manager:
@@ -446,28 +457,168 @@ class VectorStoreBuilder:
                         if self.vector_db_dir.exists():
                             shutil.rmtree(self.vector_db_dir)
                             self.vector_db_dir.mkdir(exist_ok=True)
-                
+
                 if progress_callback:
                     progress_callback("새 벡터 DB 구축 시작...")
-                
+
                 print("🏗️ 새 벡터 DB 구축 시작...")
                 self.build_vector_store(progress_callback)
-                
+
                 if progress_callback:
                     progress_callback("✅ 새 벡터 DB 구축 완료!")
-                
+
                 print("✅ 새 벡터 DB 구축 완료!")
                 return True, "새 벡터 DB를 성공적으로 구축했습니다."
-            
+
         except Exception as e:
             error_msg = f"벡터 DB 초기화 실패: {e}"
             print(f"❌ {error_msg}")
-            
+
             if progress_callback:
                 progress_callback(f"❌ {error_msg}")
-            
+
             return False, error_msg
-    
+
+    def _build_from_json(self, progress_callback: Optional[Callable] = None) -> tuple:
+        """
+        temp_texts 폴더의 documents.json 파일들로부터 벡터 DB 구축
+        OCR 단계를 건너뛰고 기존에 저장된 Document 객체들을 사용하여 벡터 DB 생성
+
+        Args:
+            progress_callback: 진행상황 콜백 함수
+
+        Returns:
+            tuple: (성공 여부, 메시지)
+        """
+        try:
+            if progress_callback:
+                progress_callback("JSON 파일에서 벡터 DB 구축 시작...")
+
+            print("\n📋 JSON 파일에서 벡터 DB 구축 시작")
+            print("=" * 60)
+
+            # temp_texts 디렉토리에서 documents.json 파일들 찾기
+            json_files = []
+            if self.temp_texts_dir.exists():
+                for pdf_dir in self.temp_texts_dir.iterdir():
+                    if pdf_dir.is_dir():
+                        documents_dir = pdf_dir / "documents"
+                        if documents_dir.exists():
+                            json_file = documents_dir / f"{pdf_dir.name}_documents.json"
+                            if json_file.exists():
+                                json_files.append((pdf_dir.name, json_file))
+
+            if not json_files:
+                error_msg = f"temp_texts 디렉토리에 documents.json 파일이 없습니다: {self.temp_texts_dir}"
+                print(f"❌ {error_msg}")
+                return False, error_msg
+
+            print(f"📄 발견된 JSON 파일: {len(json_files)}개")
+            for pdf_name, json_path in json_files:
+                print(f"  ✓ {pdf_name}: {json_path}")
+
+            # 기존 벡터 DB 삭제
+            if progress_callback:
+                progress_callback("기존 벡터 DB 삭제 중...")
+
+            print("\n🗑️ 기존 벡터 DB 삭제...")
+            self.initialize_vector_manager()
+            if self.vector_manager:
+                delete_result = self.vector_manager.delete_saved_index(self.DEFAULT_INDEX_NAME, self.DEFAULT_MODEL_KEY)
+                print(f"   {delete_result}")
+
+            # 모든 Document 객체 로드
+            all_documents = []
+            for i, (pdf_name, json_path) in enumerate(json_files):
+                if progress_callback:
+                    progress_callback(f"JSON 로드 중: {pdf_name} ({i+1}/{len(json_files)})")
+
+                try:
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        doc_data = json.load(f)
+
+                    # 딕셔너리를 Document 객체로 변환
+                    documents = []
+                    for data in doc_data:
+                        doc = Document(
+                            page_content=data["page_content"],
+                            metadata=data["metadata"]
+                        )
+                        documents.append(doc)
+
+                    if documents:
+                        all_documents.extend(documents)
+                        print(f"  📄 {pdf_name}: {len(documents)}개 문서 로드")
+
+                except Exception as e:
+                    print(f"  ⚠️ JSON 로드 실패: {pdf_name} - {e}")
+                    continue
+
+            if not all_documents:
+                error_msg = "로드된 문서가 없습니다."
+                print(f"❌ {error_msg}")
+                return False, error_msg
+
+            print(f"\n📊 총 로드된 문서 수: {len(all_documents)}개")
+
+            # 벡터 스토어 생성
+            if progress_callback:
+                progress_callback(f"벡터 임베딩 생성 중... ({len(all_documents)}개 문서)")
+
+            try:
+                self.initialize_vector_manager()
+
+                print(f"   🤖 VectorStoreManager를 사용하여 벡터 스토어 생성 중...")
+
+                if self.vector_manager is not None:
+                    self.vector_store = self.vector_manager.auto_save_after_creation(
+                        documents=all_documents,
+                        index_name=self.DEFAULT_INDEX_NAME,
+                        model_key=self.DEFAULT_MODEL_KEY
+                    )
+                else:
+                    raise RuntimeError("VectorStoreManager is not initialized.")
+
+                print(f"   ✅ VectorStoreManager로 벡터 스토어 생성 완료")
+
+            except Exception as vector_manager_error:
+                error_msg = f"VectorStoreManager 실패: {vector_manager_error}"
+                print(f"   ❌ {error_msg}")
+                return False, error_msg
+
+            # 메타데이터 저장
+            processed_pdfs = [pdf_name for pdf_name, _ in json_files]
+            metadata = {
+                "created_at": datetime.now().isoformat(),
+                "total_documents": len(all_documents),
+                "processed_pdfs": processed_pdfs,
+                "vector_db_path": str(self.vector_db_dir),
+                "build_method": "from_json"
+            }
+
+            metadata_path = self.vector_db_dir / "metadata.json"
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, ensure_ascii=False, indent=2)
+
+            if progress_callback:
+                progress_callback(f"✅ JSON에서 벡터 DB 구축 완료! (문서 {len(all_documents)}개)")
+
+            print(f"\n✅ JSON에서 벡터 DB 구축 완료!")
+            print(f"   저장 위치: {self.vector_db_dir}")
+            print(f"   총 문서: {len(all_documents)}개")
+            print(f"   처리된 PDF: {len(processed_pdfs)}개")
+
+            return True, f"JSON에서 벡터 DB를 성공적으로 구축했습니다. (문서 {len(all_documents)}개)"
+
+        except Exception as e:
+            error_msg = f"JSON에서 벡터 DB 구축 실패: {e}"
+            print(f"❌ {error_msg}")
+
+            if progress_callback:
+                progress_callback(f"❌ {error_msg}")
+
+            return False, error_msg
+
     def get_vector_store_info(self) -> Dict[str, Any]:
         """벡터 스토어 정보 반환"""
         info = {

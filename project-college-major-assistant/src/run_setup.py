@@ -151,24 +151,44 @@ def test_rag_system():
         print(f"❌ RAG 시스템 테스트 실패: {e}")
         return False
 
-def initialize_vector_db(force_rebuild=False):
+def initialize_vector_db(force_rebuild=False, from_json=False):
     """벡터 DB 초기화"""
     print("🚀 벡터 DB 초기화 중...")
-    
+
     try:
-        from college_rag_system import initialize_database
-        
+        from vector_store_builder import VectorStoreBuilder
+
         print(f"  🔄 강제 재구축: {'예' if force_rebuild else '아니오'}")
-        
-        success = initialize_database(force_rebuild=force_rebuild)
-        
+        print(f"  📄 JSON에서 구축: {'예' if from_json else '아니오'}")
+
+        # VectorStoreBuilder 인스턴스 생성
+        builder = VectorStoreBuilder(
+            pdf_dir="korea_univ_guides",
+            temp_images_dir="temp_images",
+            vector_db_dir="vector_db"
+        )
+
+        # 벡터 DB 초기화 실행
+        result = builder.initialize_vector_db(
+            force_rebuild=force_rebuild,
+            from_json=from_json
+        )
+
+        if result is None:
+            print("벡터 DB 초기화 실패: 반환값이 없습니다.")
+            return False
+
+        success, message = result
+
+        print(f"  결과: {message}")
+
         if success:
             print("✅ 벡터 DB 초기화 완료")
             return True
         else:
             print("❌ 벡터 DB 초기화 실패")
             return False
-            
+
     except Exception as e:
         print(f"❌ 벡터 DB 초기화 실패: {e}")
         return False
@@ -178,10 +198,12 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="고등학생 학과 선택 도우미 - 환경 설정")
-    parser.add_argument("--init-db", action="store_true", 
+    parser.add_argument("--init-db", action="store_true",
                        help="벡터 DB 초기화만 실행")
     parser.add_argument("--force-rebuild", action="store_true",
                        help="기존 DB 삭제 후 강제 재구축")
+    parser.add_argument("--from-json", action="store_true",
+                       help="temp_texts 폴더의 documents.json 파일들로부터 벡터 DB 구축 (OCR 단계 건너뛰기)")
     parser.add_argument("--setup-only", action="store_true",
                        help="DB 초기화 없이 환경 설정만 실행")
     
@@ -205,7 +227,7 @@ def main():
             return False
             
         # 벡터 DB 초기화 실행
-        success = initialize_vector_db(force_rebuild=args.force_rebuild)
+        success = initialize_vector_db(force_rebuild=args.force_rebuild, from_json=args.from_json)
         
         if success:
             print("\n🎉 벡터 DB 초기화가 완료되었습니다!")
@@ -227,7 +249,7 @@ def main():
     
     # DB 초기화 단계 추가 (setup-only가 아닌 경우)
     if not args.setup_only:
-        base_steps.append(("벡터 DB 초기화", lambda: initialize_vector_db(force_rebuild=args.force_rebuild)))
+        base_steps.append(("벡터 DB 초기화", lambda: initialize_vector_db(force_rebuild=args.force_rebuild, from_json=args.from_json)))
     
     failed_steps = []
     
