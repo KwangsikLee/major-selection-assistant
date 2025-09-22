@@ -8,6 +8,7 @@ Version: 0.1.0
 
 import os
 import sys
+import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Callable
 import json
@@ -39,7 +40,7 @@ class VectorStoreBuilder:
         self.vector_db_dir = Path(vector_db_dir)
         
         # temp_texts 디렉토리 추가
-        self.temp_texts_dir = Path(temp_images_dir).parent / "temp_texts"
+        self.temp_texts_dir = Path(temp_images_dir).parent / "temp_texts_chunk"
         
         # 디렉토리 생성
         self.temp_images_dir.mkdir(exist_ok=True)
@@ -93,6 +94,49 @@ class VectorStoreBuilder:
                 save_directory=str(self.vector_db_dir),
                 hf_api_token=hf_token if hf_token is not None else ""
             )
+
+    def _parse_college_and_department(self, name: str) -> tuple[str, str]:
+        """디렉토리/파일 스템 이름에서 단과대학명, 학과명을 추출한다.
+
+        기대 형식 예: "01-문과대학-03.국어국문학과"
+        또한 "..._documents.json" 같은 접미사는 사전 정규화하여 제거한다.
+        형식이 다르면 휴리스틱으로 유추한다.
+        """
+        # 사전 정규화: 확장자/문서 접미사 제거
+        base = name.strip()
+        base = re.sub(r"(?i)(_?documents)?\.json$", "", base)  # _documents.json 또는 .json 제거
+        base = base.strip()
+
+        college_name = ""
+        department_name = ""
+
+        # 1) 정규식 기반 우선 매칭: 01-단과-03.학과
+        m = re.match(r"^(\d+)-(.+?)-(\d+)\.(.+)$", base)
+        if m:
+            college_name = m.group(2).strip()
+            department_name = m.group(4).strip()
+            return college_name.replace('_', ' '), department_name.replace('_', ' ')
+
+        # 2) fallback: 마지막 '.' 뒤는 학과명으로 가정
+        if '.' in base:
+            left, department_name = base.rsplit('.', 1)
+            # 왼쪽에서 첫 '-' 이후를 취하되, 마지막에 붙은 '-숫자' 제거
+            if '-' in left:
+                after_first_dash = left.split('-', 1)[1]
+                after_first_dash = re.sub(r"-\d+$", "", after_first_dash)
+                college_name = after_first_dash
+        else:
+            # '.' 없으면 '-' 분해: [번호, 단과(, ..., 학과후보)]
+            if '-' in base:
+                parts = base.split('-')
+                if len(parts) >= 2:
+                    college_name = parts[1]
+                if len(parts) >= 3:
+                    department_name = parts[-1]
+
+        college_name = (college_name or "").replace('_', ' ').strip()
+        department_name = (department_name or "").replace('_', ' ').strip()
+        return college_name, department_name
     
     def vector_store_exists(self) -> bool:
         """벡터 스토어가 이미 존재하는지 확인"""
@@ -209,6 +253,8 @@ class VectorStoreBuilder:
                     
                 # 3. 텍스트를 Document 객체로 변환하고 저장
                 pdf_documents = []
+                # 디렉토리/파일 이름에서 단과대학/학과명 파싱
+                college_name, department_name = self._parse_college_and_department(pdf_filename)
                 for j, text in enumerate(pdf_texts):
                     if len(text) > 50:  # 너무 짧은 텍스트 제외
                         # 텍스트 분할
@@ -223,7 +269,9 @@ class VectorStoreBuilder:
                                 "source": pdf_file.name,
                                 "page": j + 1,
                                 "chunk": k + 1,
-                                "processed_at": datetime.now().isoformat()
+                                "processed_at": datetime.now().isoformat(),
+                                "college_name": college_name,
+                                "department_name": department_name,
                             }
                         )
                         pdf_documents.append(doc)
@@ -537,12 +585,22 @@ class VectorStoreBuilder:
                     with open(json_path, 'r', encoding='utf-8') as f:
                         doc_data = json.load(f)
 
+                    # 경로(디렉토리 이름)에서 단과대학/학과명 추출
+                    college_name, department_name = self._parse_college_and_department(pdf_name)
+
                     # 딕셔너리를 Document 객체로 변환
                     documents = []
                     for data in doc_data:
+                        base_meta = data.get("metadata", {}) or {}
+                        # meta에 단과대학/학과명을 추가
+                        base_meta.update({
+                            "college_name": college_name,
+                            "department_name": department_name,
+                        })
+                        prefix_str = college_name + ' ' + department_name + ' ' 
                         doc = Document(
-                            page_content=data["page_content"],
-                            metadata=data["metadata"]
+                            page_content= prefix_str + data.get("page_content", ""),
+                            metadata=base_meta,
                         )
                         documents.append(doc)
 

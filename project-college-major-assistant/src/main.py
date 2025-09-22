@@ -407,7 +407,7 @@ def create_gradio_interface():
                 )
                 
                 question_input = gr.Textbox(
-                    label="질문 입력 (Enter 키로 전송)",
+                    submit_btn=True,                    
                     placeholder="전공, 진로, 대학생활에 대해 궁금한 점을 질문하세요...",
                     interactive=True
                 )
