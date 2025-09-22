@@ -16,7 +16,7 @@ korea_univ_guides
 
 vector_db/
 .env
-*.png
+# *.png
 *.json
 
 CLAUDE.md
