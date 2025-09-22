@@ -124,15 +124,9 @@ project-college-major-assistant/
 │   ├── 🏗️ vector_store_builder.py # 벡터 스토어 빌더
 │   └── ⚙️ run_setup.py           # 환경 설정 및 테스트 스크립트
 │
-├── 📋 PRD.md                     # 제품 요구사항 정의서
-├── 📊 progress.md                # 개발 진행상황 추적
 ├── 📝 README.md                  # 프로젝트 설명서 (현재 파일)
-├── 🔍 CLAUDE.md                  # Claude Code 작업 지침
-│
 ├── 🔧 requirements.txt           # Python 의존성 패키지 목록
 ├── 🌍 .env.example               # 환경 변수 템플릿
-├── 🔒 .env                       # 환경 변수 (실제 API 키)
-│
 ├── 📚 korea_univ_guides/         # 대학교 학과 안내 PDF 파일들 (64개)
 ├── 🖼️ temp_images/               # PDF에서 추출한 임시 이미지 파일들
 ├── 📄 temp_texts/                # 임시 텍스트 파일들
