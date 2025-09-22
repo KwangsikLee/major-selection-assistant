@@ -1,25 +1,74 @@
 # 🎓 고등학생 학과 선택 도우미
 
-AI 기반 대학교 전공 선택 상담 시스템입니다. 대학교 학과 안내 자료를 RAG(Retrieval-Augmented Generation) 기술로 분석하여 고등학생들의 전공 선택을 도와드립니다.
+대학교 학과 안내 자료를 RAG(Retrieval-Augmented Generation)로 분석해 고등학생의 전공 선택을 돕는 AI 상담 시스템입니다.
 
 ## 📋 프로젝트 개요
 
-- **목표**: 고등학생의 전공 선택 고민 해결 지원
-- **기술**: RAG + LangChain + OpenAI + FAISS + Gradio
-- **데이터**: 대학교 학과 안내 PDF 자료 (64개 파일)
-- **UI**: 웹 기반 채팅 인터페이스
-- **검색**: Hybrid Retriever (Dense + Sparse 검색)
+- 목표: 학과 정보 탐색과 비교 판단을 돕는 신뢰 가능한 Q&A
+- 데이터: 대학 학과 안내 PDF 64개 (OCR → 정제 → 청크 → 임베딩)
+- UI: 웹 기반 채팅 인터페이스(Gradio)
+- 검색: Hybrid Retrieval(Dense + BM25) + Cross-Encoder Re-ranking
 
-## 🏗️ 시스템 아키텍처
+
+## 📸 스크린샷
+
+![홈 화면](./docs/images/ui-home.png)
+![채팅 화면](./docs/images/ui-chat.png)
+![검색 근거](./docs/images/department_info2.png)
+
+
+## 🧰 사용 기술(Tech Stack)
+
+- 언어/런타임: Python 3.10+
+- 프레임워크: LangChain(체인/리트리버), Gradio(UI)
+- LLM: OpenAI `gpt-4o-mini`
+- 임베딩: Hugging Face Embeddings (기본: `google/embeddinggemma-300m`)
+- 벡터 스토어: FAISS
+- 검색: BM25 + 벡터 검색 앙상블(`EnsembleRetriever`), Cross-Encoder 리랭커(BGE 계열)
+- OCR/PDF: PyMuPDF, PaddleOCR, EasyOCR, OpenCV, Pillow
+- NLP/유틸: sentence-transformers, transformers, kss, tiktoken, numpy, pandas, scikit-learn, python-dotenv, tqdm
+
+구현 기준(핵심 소스)
+- `project-college-major-assistant/src/vector_store_builder.py`: PDF→이미지→OCR→청크→임베딩→FAISS 구축
+- `project-college-major-assistant/src/college_qa_system.py`: Hybrid Retriever + LangChain RetrievalQA 체인 구성
+- `project-college-major-assistant/src/main.py`: Gradio 기반 채팅 UI
+
+## 🏗️ RAG 시스템 다이어그램
+
+```mermaid
+flowchart TB
+    subgraph Ingestion[오프라인 구축 파이프라인]
+        PDFs[PDF 자료] --> IMG[이미지 추출 - PyMuPDF]
+        IMG --> OCR[OCR - PaddleOCR/EasyOCR]
+        OCR --> SPLIT[텍스트 청크화]
+        SPLIT --> EMB[임베딩 - HF embeddings: embeddinggemma]
+        EMB --> IDX[ - FAISS 인덱스]
+    end
+
+    subgraph Query[온라인 질의 흐름]
+        USER[사용자] --> UI[Gradio UI]
+        UI --> QA[LangChain RetrievalQA + 프롬프트]
+        QA --> RET[Hybrid Retriever]
+        RET -->|Vector| IDX
+        RET -->|Keyword| BM25[BM25 Retriever]
+        RET -->|Rerank| RER[CrossEncoder Reranker - BGE]
+        QA --> LLM[OpenAI gpt-4o-mini]
+        LLM --> UI
+    end
+```
+
+참고: BM25는 벡터 스토어의 문서에서 동적으로 구성되며, Hybrid(Ensemble/Hybrid) 방식으로 벡터 검색 결과와 융합 후 Cross-Encoder로 재순위화합니다.
+
+## 🖼️ 시스템 개요 다이어그램(파이프라인)
 
 ```mermaid
 graph TD
     A[PDF 파일들] --> B[이미지 추출]
     B --> C[OCR 텍스트 변환]
-    C --> D[텍스트 전처리]
-    D --> E[벡터 임베딩]
+    C --> D[텍스트 전처리/청크]
+    D --> E[임베딩]
     E --> F[FAISS 벡터 DB]
-    G[사용자 질문] --> H[벡터 검색]
+    G[사용자 질문] --> H[하이브리드 검색]
     F --> H
     H --> I[LLM 답변 생성]
     I --> J[Gradio UI]
@@ -98,9 +147,9 @@ project-college-major-assistant/
 - **텍스트 정제**: 한국어 특화 전처리 및 오류 보정
 
 ### 2. RAG 시스템
-- **벡터 임베딩**: OpenAI text-embedding-ada-002
+- **임베딩**: Hugging Face Embeddings(기본 `google/embeddinggemma-300m`)
 - **벡터 저장소**: FAISS (Facebook AI Similarity Search)
-- **검색**: Hybrid Retriever (Dense + Sparse 검색) 기반 상위 3개 문서
+- **검색**: Hybrid Retrieval(Dense + BM25 앙상블) + Cross-Encoder 리랭킹
 - **생성**: OpenAI GPT-4o-mini로 맥락 기반 답변 생성
 
 ### 3. 사용자 인터페이스
@@ -157,12 +206,17 @@ python -c "from src.college_rag_system import CollegeRAGSystem; print('OK')"
 - **답변 속도**: 질문당 3-5초
 - **정확도**: 대학 안내 자료 기반 약 85-90%
 
-### 제한사항
-- **데이터**: 현재 64개 PDF 파일 처리 중
-- **언어**: 한국어 전용
-- **OCR**: 이미지 품질에 따른 정확도 편차
-- **API**: OpenAI API 사용량에 따른 비용 발생
-- **검색**: Hybrid 검색으로 향상된 성능
+### RAG Evaluation
+=== Retriever Evaluation Summary ===
+- **samples**: 10
+- **hit_rate@k**: 0.9000
+- **mrr@k**: 0.8500
+- **precision@k**: 0.1800
+- **recall@k**: 0.9000
+- **avg_context_precision**: 0.5156
+- **avg_best_similarity**: 0.8930
+
+
 
 ## 🔄 업데이트 계획
 
@@ -178,16 +232,6 @@ python -c "from src.college_rag_system import CollegeRAGSystem; print('OK')"
 - **시각화**: 학과 정보 차트 및 그래프
 - **배포**: 웹 서비스 형태 배포
 
-## 🤝 기여하기
-
-### 버그 리포트
-- 이슈 등록 시 오류 로그와 재현 단계 포함
-- 환경 정보 (OS, Python 버전) 명시
-
-### 개선 제안
-- 새로운 기능 아이디어
-- 성능 최적화 방안
-- UI/UX 개선안
 
 ## 📄 라이선스
 
@@ -200,12 +244,8 @@ python -c "from src.college_rag_system import CollegeRAGSystem; print('OK')"
 - [Gradio 문서](https://gradio.app/docs/)
 - [FAISS 라이브러리](https://faiss.ai/)
 
-## 📞 문의
-
-프로젝트 관련 문의사항이나 기술적 도움이 필요하시면 이슈를 등록해주세요.
-
 ---
 
 **개발자**: kwangsiklee  
 **버전**: v0.2.1 (Phase 2 완료)  
-**최종 업데이트**: 2025-09-10
+**최종 업데이트**: 2025-09-22

@@ -331,7 +331,7 @@ def main() -> None:
     load_dotenv()
 
     # dataset_path = Path(args.dataset)
-    dataset_path = Path("./eval/krag_eval_set.csv")
+    dataset_path = Path("./eval/krag_eval_set_ex.csv")
     if not dataset_path.exists():
         raise FileNotFoundError(f"Dataset not found: {dataset_path}")
 
